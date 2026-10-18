@@ -21,7 +21,6 @@ h1 {
   color: #666;
 }
 
-/* Design-system sample. The one element on the page with any styling intent. */
 .card {
   display: inline-block;
   padding: 16px 20px;
@@ -43,7 +42,6 @@ h1 {
   color: #666;
 }
 
-/* Hand-rolled status pill — note this does NOT come from the design system. */
 .badge {
   display: inline-block;
   padding: 2px 8px;
@@ -115,27 +113,21 @@ th {
   background: #fff4e5;
 }
 
-.row-expired {
-  background: #fdecea;
-}
-
-.row-expiring-soon {
+.row-follow-up {
   background: #fff8e1;
 }
 
-.badge-action,
-.badge-expired {
+.badge-action {
   background: #c62828;
 }
 
-.badge-expiring-soon {
-  background: #ef6c00;
+.badge-follow-up {
+  margin-left: 4px;
+  color: #5d4800;
+  background: #f9c846;
 }
 
-.badge-ok {
-  background: #2e7d32;
-}
-
-.badge-unknown {
-  background: #9e9e9e;
+.badge-assignment {
+  margin-left: 4px;
+  background: #1976d2;
 }

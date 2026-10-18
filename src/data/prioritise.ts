@@ -1,7 +1,7 @@
 // Prioritisation rules for the advisor work queue.
 // Normalises the messy raw fields at read time (raw rows are left untouched)
 // and exposes the sort/filter/highlight rules used by the dashboard.
-// TODO: add unit tests (e.g. Vitest) covering normalisers, comparators and isActionable.
+// TODO: add unit tests (e.g. Vitest) covering normalisers, comparators and alerts.
 
 export type Row = Record<string, string>;
 
@@ -13,8 +13,7 @@ const PROFILE_RANK: Record<ProfileStatus, number> = {
     "not started": 2,
 };
 
-// Lower rank = higher priority. Anything at TERMINAL_CASE_RANK is past the
-// "Approved/Denied/Filed" threshold and is waiting on someone else.
+// Lower rank = higher priority within the existing baseline work-queue sort.
 const CASE_RANK: Record<string, number> = {
     "rfe issued": 0,
     "not filed": 1,
@@ -25,11 +24,8 @@ const CASE_RANK: Record<string, number> = {
     withdrawn: 3,
 };
 const TERMINAL_CASE_RANK = 3;
-
-export const EXPIRING_SOON_DAYS = 90;
-const MS_PER_DAY = 86_400_000;
-const DMY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 const VISA_NOISE = /[\s-]/g;
+const PENDING_CASE_STATUSES = new Set(["not filed", "in review", "rfe issued"]);
 
 export function normaliseProfileStatus(raw: string): ProfileStatus {
     const s = raw.trim().toLowerCase();
@@ -50,17 +46,6 @@ export function normaliseCaseStatus(raw: string): string {
     return s === "" ? "not filed" : s;
 }
 
-/** Parses DD/MM/YYYY; returns null for blanks or unparseable values. */
-export function parseDate(raw: string): Date | null {
-    const m = DMY.exec(raw.trim());
-    if (!m) {
-        return null;
-    }
-    const [, d, mo, y] = m;
-    const date = new Date(Number(y), Number(mo) - 1, Number(d));
-    return Number.isNaN(date.getTime()) ? null : date;
-}
-
 export function completionPct(row: Row): number {
     const n = Number.parseFloat(row.profile_completion_pct);
     return Number.isFinite(n) ? n : 0;
@@ -74,16 +59,45 @@ function isO1A(row: Row): boolean {
     return normaliseVisaType(row.visa_type) === "O1A";
 }
 
-export function hasVisa(row: Row): boolean {
-    return normaliseCaseStatus(row.case_status) === "approved";
+export function isPendingWork(row: Row): boolean {
+    return PENDING_CASE_STATUSES.has(normaliseCaseStatus(row.case_status));
 }
 
-/** Completed profile and case not yet past the Approved/Denied/Filed threshold. */
 export function isActionable(row: Row): boolean {
-    return (
-        normaliseProfileStatus(row.profile_status) === "completed" &&
-        caseRank(row) < TERMINAL_CASE_RANK
-    );
+    const status = normaliseCaseStatus(row.case_status);
+    return status === "rfe issued" ||
+        (status === "not filed" &&
+            normaliseProfileStatus(row.profile_status) === "completed");
+}
+
+export function isFollowUp(row: Row): boolean {
+    const status = normaliseCaseStatus(row.case_status);
+    const profileStatus = normaliseProfileStatus(row.profile_status);
+    const completion = completionPct(row);
+    return status === "in review" ||
+        (profileStatus === "in progress" &&
+            (completion >= 80 || completion === 0));
+}
+
+export function needsAssignment(row: Row): boolean {
+    return row.assigned_advisor.trim() === "";
+}
+
+export function comparePendingWork(a: Row, b: Row): number {
+    const actionPriority = Number(isActionable(b)) - Number(isActionable(a));
+    if (actionPriority !== 0) {
+        return actionPriority;
+    }
+    const followUpPriority = Number(isFollowUp(b)) - Number(isFollowUp(a));
+    if (followUpPriority !== 0) {
+        return followUpPriority;
+    }
+    const assignmentPriority =
+        Number(needsAssignment(b)) - Number(needsAssignment(a));
+    if (assignmentPriority !== 0) {
+        return assignmentPriority;
+    }
+    return compareWithoutVisa(a, b);
 }
 
 /** Profile status > (O-1A first within Completed) > case status > completion % desc. */
@@ -109,30 +123,6 @@ export function compareWithoutVisa(a: Row, b: Row): number {
         return pct;
     }
     return a.employee_id.localeCompare(b.employee_id);
-}
-
-/** Expiry ascending; rows without an expiry date go last. */
-export function compareWithVisa(a: Row, b: Row): number {
-    const ea = parseDate(a.expires_at)?.getTime() ?? Number.POSITIVE_INFINITY;
-    const eb = parseDate(b.expires_at)?.getTime() ?? Number.POSITIVE_INFINITY;
-    if (ea !== eb) {
-        return ea < eb ? -1 : 1;
-    }
-    return a.employee_id.localeCompare(b.employee_id);
-}
-
-export type ExpiryState = "expired" | "expiring-soon" | "ok" | "unknown";
-
-export function expiryState(row: Row, today: Date = new Date()): ExpiryState {
-    const expires = parseDate(row.expires_at);
-    if (!expires) {
-        return "unknown";
-    }
-    const days = (expires.getTime() - today.getTime()) / MS_PER_DAY;
-    if (days < 0) {
-        return "expired";
-    }
-    return days <= EXPIRING_SOON_DAYS ? "expiring-soon" : "ok";
 }
 
 export const UNASSIGNED = "__unassigned__";

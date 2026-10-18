@@ -4,7 +4,7 @@ body {
 }
 
 .page {
-  max-width: 800px;
+  max-width: 1000px;
   padding: 32px 24px;
   margin: 0 auto;
   font-family: system-ui, sans-serif;
@@ -69,4 +69,73 @@ td {
 th {
   color: #444;
   border-bottom: 2px solid #ddd;
+}
+
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.toggle {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.toggle button {
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  background: #fff;
+  border: 0;
+}
+
+.toggle button.active {
+  color: #fff;
+  background: #1a1a1a;
+}
+
+.filter {
+  font-size: 13px;
+  color: #444;
+}
+
+.row-actionable {
+  background: #fff4e5;
+}
+
+.row-expired {
+  background: #fdecea;
+}
+
+.row-expiring-soon {
+  background: #fff8e1;
+}
+
+.badge-action,
+.badge-expired {
+  background: #c62828;
+}
+
+.badge-expiring-soon {
+  background: #ef6c00;
+}
+
+.badge-ok {
+  background: #2e7d32;
+}
+
+.badge-unknown {
+  background: #9e9e9e;
 }

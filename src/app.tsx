@@ -1,161 +1,213 @@
-import { useEffect, useMemo, useState } from "react";
-import { Card } from "./components/card";
-import { loadEmployees } from "./data/load-employees";
-import {
-  advisorOptions,
-  comparePendingWork,
-  compareWithoutVisa,
-  isActionable,
-  isFollowUp,
-  isPendingWork,
-  matchesAdvisor,
-  needsAssignment,
-  normaliseProfileStatus,
-  type Row,
-  UNASSIGNED,
-} from "./data/prioritise";
+import { SurfaceHost } from "./components/surfaces";
+import { Avatar, Button, Icon, LinkButton, Select } from "./components/ui";
+import { CLIENTS, type ClientScope } from "./data/workspace";
+import { CaseRegister } from "./screens/cases";
+import { Compliance } from "./screens/compliance";
+import { ProfileReview } from "./screens/review";
+import { MyWork } from "./screens/work";
+import { useWorkspace, WorkspaceProvider } from "./workspace-context";
 
-type View = "pending" | "completed";
-
-const PROFILE_LABEL = {
-  completed: "Completed",
-  "in progress": "In Progress",
-  "not started": "Not Started",
-} as const;
-
-function rowKey(row: Row, index: number): string {
-  return row.employee_id || `row-${index}-${row.email || row.full_name}`;
+function Sidebar() {
+  const { nav, navigate, open } = useWorkspace();
+  const active = nav.screen === "review" ? nav.origin : nav.screen;
+  return (
+    <aside aria-label="Main navigation" className="sidebar">
+      <button
+        aria-label="Waypoint, go to My work"
+        className="brand"
+        onClick={() => navigate({ screen: "work" })}
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="21"
+          viewBox="0 0 24 24"
+          width="21"
+        >
+          <path
+            d="m12 2 10 10-10 10L2 12Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+          />
+          <path d="m12 7 5 5-5 5-5-5Z" fill="currentColor" />
+        </svg>
+        waypoint
+      </button>
+      <div className="navlabel">Workspace</div>
+      <nav>
+        {(["work", "cases", "compliance"] as const).map((screen) => (
+          <button
+            aria-current={active === screen ? "page" : undefined}
+            className={`navitem ${active === screen ? "active" : ""}`}
+            key={screen}
+            onClick={() => navigate({ screen })}
+            type="button"
+          >
+            <Icon name={screen} />
+            <span>
+              {screen === "work"
+                ? "My work"
+                : screen === "cases"
+                  ? "Cases"
+                  : "Compliance"}
+            </span>
+          </button>
+        ))}
+      </nav>
+      <div className="navlabel directory-label">Directory</div>
+      <nav>
+        <button
+          className="navitem directory-item"
+          onClick={() => open({ kind: "people" })}
+          type="button"
+        >
+          People
+        </button>
+        <button
+          className="navitem directory-item"
+          onClick={() => open({ kind: "clients" })}
+          type="button"
+        >
+          Clients
+        </button>
+      </nav>
+      <div className="sidebar-bottom">
+        <button
+          className="user-button"
+          onClick={() => open({ kind: "user" })}
+          type="button"
+        >
+          <Avatar name="A. Singh" />
+          <span>
+            A. Singh
+            <span className="muted tiny user-role">Immigration advisor</span>
+          </span>
+        </button>
+      </div>
+    </aside>
+  );
 }
 
-function App() {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [view, setView] = useState<View>("pending");
-  const [advisor, setAdvisor] = useState("");
-
-  useEffect(() => {
-    loadEmployees().then(setRows);
-  }, []);
-
-  const advisors = useMemo(() => advisorOptions(rows), [rows]);
-  const filtered = useMemo(
-    () => rows.filter((r) => matchesAdvisor(r, advisor)),
-    [rows, advisor]
-  );
-  const pendingWork = useMemo(
-    () => filtered
-      .filter(isPendingWork)
-      .sort(comparePendingWork),
-    [filtered]
-  );
-  const completedWork = useMemo(
-    () => filtered
-      .filter((r) => !isPendingWork(r))
-      .sort(compareWithoutVisa),
-    [filtered]
-  );
-  const actionableCount = pendingWork.filter(isActionable).length;
-  const visibleRows = view === "pending" ? pendingWork : completedWork;
-
+function Topbar() {
+  const { demo, nav, navigate, open, openCase } = useWorkspace();
+  const record = demo.cases.find((item) => item.id === nav.reviewCaseId);
   return (
-    <div className="page">
-      <h1>Visa Tracking</h1>
-      <p className="subtitle">Advisor Dashboard</p>
-
-      <div className="cards">
-        <Card label="Action needed" value={actionableCount} />
-      </div>
-
-      <div className="toolbar">
-        <div className="toggle">
-          <button
-            aria-pressed={view === "pending"}
-            className={view === "pending" ? "active" : ""}
-            onClick={() => setView("pending")}
-            type="button"
+    <header
+      className={`topbar ${nav.screen === "review" ? "review-topbar" : ""}`}
+    >
+      <Button
+        className="mobile-menu-button"
+        onClick={() => open({ kind: "menu" })}
+      >
+        <Icon name="menu" />
+        <span className="sr-only">Menu</span>
+      </Button>
+      {nav.screen === "review" && record ? (
+        <nav aria-label="Breadcrumb" className="breadcrumb">
+          <LinkButton
+            onClick={() => open({ kind: "client", clientId: record.client })}
           >
-            Pending work ({pendingWork.length})
-          </button>
-          <button
-            aria-pressed={view === "completed"}
-            className={view === "completed" ? "active" : ""}
-            onClick={() => setView("completed")}
-            type="button"
+            {CLIENTS[record.client]}
+          </LinkButton>
+          <span aria-hidden="true">/</span>
+          <LinkButton onClick={() => openCase(record.id)}>
+            {record.route}
+          </LinkButton>
+          <span aria-hidden="true">/</span>
+          <span>Profile review</span>
+        </nav>
+      ) : (
+        <>
+          <Select
+            className="client-selector"
+            label="Client scope"
+            onChange={(event) =>
+              navigate({ client: event.target.value as ClientScope, page: 1 })
+            }
+            value={nav.client}
           >
-            Completed work ({completedWork.length})
-          </button>
-        </div>
-
-        <label className="filter">
-          Advisor{" "}
-          <select onChange={(e) => setAdvisor(e.target.value)} value={advisor}>
-            <option value="">All advisors</option>
-            {advisors.map((a) => (
-              <option key={a} value={a}>
-                {a}
+            <option value="all">All clients</option>
+            {Object.entries(CLIENTS).map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
               </option>
             ))}
-            <option value={UNASSIGNED}>Unassigned</option>
-          </select>
-        </label>
+          </Select>
+          <button
+            aria-label="Search people, cases, or clients"
+            className="global-search-trigger"
+            onClick={() => open({ kind: "search" })}
+            type="button"
+          >
+            <Icon name="search" size={15} />
+            <span className="desktop-search-label">
+              Search people, cases, or clients...
+            </span>
+            <span className="mobile-search-label">Search</span>
+          </button>
+        </>
+      )}
+      <div className="topbar-meta">
+        {nav.screen === "compliance" && (
+          <span className="as-of">As of 18 Oct 2026</span>
+        )}
+        <button
+          className="demo-indicator"
+          onClick={() => open({ kind: "demo" })}
+          type="button"
+        >
+          <span aria-hidden="true" className="demo-dot" />
+          Demo <span className="demo-detail">- fictional data</span>
+          <Icon name="chevron" size={11} />
+        </button>
       </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Priority</th>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Visa</th>
-            <th>Profile</th>
-            <th>Case status</th>
-            <th>Completion</th>
-            <th>Advisor</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleRows.map((row, i) => {
-            const actionable = isActionable(row);
-            const followUp = isFollowUp(row);
-            const unassigned = needsAssignment(row);
-            const rowClasses = [
-              actionable && "row-actionable",
-              followUp && !actionable && "row-follow-up",
-            ].filter(Boolean).join(" ");
-            return (
-              <tr className={rowClasses} key={rowKey(row, i)}>
-                <td>
-                  {actionable && (
-                    <span className="badge badge-action">Action needed</span>
-                  )}
-                  {followUp && (
-                    <span className="badge badge-follow-up">Follow up</span>
-                  )}
-                  {unassigned && (
-                    <span className="badge badge-assignment">
-                      Needs assignment
-                    </span>
-                  )}
-                </td>
-                <td>{row.employee_id || "—"}</td>
-                <td>{row.full_name}</td>
-                <td>{row.visa_type}</td>
-                <td>
-                  {PROFILE_LABEL[normaliseProfileStatus(row.profile_status)]}
-                </td>
-                <td>{row.case_status || "Not Filed"}</td>
-                <td>
-                  {row.profile_completion_pct !== ""
-                    ? `${row.profile_completion_pct}%`
-                    : "—"}
-                </td>
-                <td>{row.assigned_advisor || "Unassigned"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    </header>
   );
 }
 
-export default App;
+function WorkspaceShell() {
+  const { nav, navigate } = useWorkspace();
+  return (
+    <>
+      <div className="app-shell" inert={nav.overlays.length > 0}>
+        <button
+          className="skip-link"
+          onClick={() => document.getElementById("workspace-content")?.focus()}
+          type="button"
+        >
+          Skip to content
+        </button>
+        <Sidebar />
+        <div className="main-column">
+          <Topbar />
+          <div id="workspace-content" tabIndex={-1}>
+            {nav.screen === "work" && <MyWork />}
+            {nav.screen === "cases" && <CaseRegister />}
+            {nav.screen === "compliance" && <Compliance />}
+            {nav.screen === "review" && <ProfileReview />}
+            {nav.screen === "not-found" && (
+              <main className="content not-found">
+                <Icon name="search" size={32} />
+                <h1>That destination isn&apos;t here.</h1>
+                <p>Let&apos;s get you back to your advisor workspace.</p>
+                <Button onClick={() => navigate({ screen: "work" })} primary>
+                  Go to My work
+                </Button>
+              </main>
+            )}
+          </div>
+        </div>
+      </div>
+      <SurfaceHost />
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <WorkspaceProvider>
+      <WorkspaceShell />
+    </WorkspaceProvider>
+  );
+}
